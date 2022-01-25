@@ -79,8 +79,8 @@ var ExampleHighlightRules = function() {
             //     }]
             {
                 token: keywordMapper,
-                // regex: "[a-zA-Z_$][a-zA-Z0-9_$]*\\b"
-                regex: "\\w+\\b"
+                regex: "[a-zA-Z_$][a-zA-Z0-9_$]*\\b"
+                // regex: "\\w+\\b"
             },
             {
                 token: "comment",
@@ -97,10 +97,8 @@ var ExampleHighlightRules = function() {
             {
                 token: "string",
                 regex: '"',
-                next: [{
-                    regex: /\\./,
-                    token: "escape.character"
-                }, {
+                next: [
+                {
                     regex: '"',
                     token: "string",
                     next: "start"
@@ -111,10 +109,8 @@ var ExampleHighlightRules = function() {
             {
                 token: "string",
                 regex: '\'',
-                next: [{
-                    regex: /\\./,
-                    token: "escape.character"
-                }, {
+                next: [
+                {
                     regex: '\'',
                     token: "string",
                     next: "start"
@@ -123,9 +119,16 @@ var ExampleHighlightRules = function() {
                 }]
             },
             {
-                token: "constant.numeric",
-                regex: "/\d+(?:[.](\d)*)?|[.]\d+/"
+                token : "constant.numeric", // hexadecimal, octal and binary
+                regex : /0(?:[xX][0-9a-fA-F]+|[oO][0-7]+|[bB][01]+)\b/
+            }, {
+                token : "constant.numeric", // decimal integers and floats
+                regex : /(?:\d\d*(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+\b)?/
             }
+            // {
+            //     token: "constant.numeric",
+            //     regex: "/\d+(?:[.](\d)*)?|[.]\d+/"
+            // }
         ]
     };
     this.normalizeRules()
