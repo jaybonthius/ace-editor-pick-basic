@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>ACE in Action</title>
+<style type="text/css" media="screen">
+    #editor { 
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+    }
+</style>
+</head>
+<body>
+
+ <div id="editor">
+    *
+    * MFG Inquiry processor
+    * 11-10-21*cgb - 37 years!
+    *
+    * A great way to inspect inquiries is to get the job# from the monitor
+    * and then enter: "watch ct userjobs {job#}" at tcl.
+    * You can then see the updates in realtime.
+    *
+        clear
+    *
+        true=1; false=0
+    *
+        wsroot.path = oconv('root.path','tmd;x;;3')
+        ufoutput.path = oconv('ufoutput','tmd;x;;3')
+        navs = 'firstpg|prevpg|nextpg|lastpg|chgpg'; * Navigation button values
+        sorts = 'sortasc|sortdesc'; * sorting button values
+    *
+        open 'ufoutput' to ufoutputf else stop 201,'ufoutput'
+        open 'temp' to tempf else stop 201,'temp'
+        open 'wstpl' to wstplf else stop 201,'wstpl'
+        open 'mfgtpl' to mfgtplf else stop 201,'mfgtpl'
+        open 'webvars' to webvarsf else stop 201,'webvars'
+        open 'menus' to menusf else stop 201,'menus'
+        open 'user' to userf else stop 201,'user'
+        open 'userjobs' to userjobsf else stop 201,'userjobs'
+        open 'proc' to procf else stop 201,'proc'
+    *
+        tclread cmd
+        session.id = field(cmd,' ',2)
+        call getvars(session.id,vars,vals)
+    *
+        locate('op',vars;vi) then op = vals<vi> else op = ''
+        locate('user_id',vars;vi) then userid = vals<vi> else userid = ''
+        locate('jobno',vars;vi) then jobno = vals<vi> else jobno = ''
+        locate('button',vars;vi) then button = vals<vi> else button=''
+        locate('section',vars;vi) then sectionno = vals<vi> else sectionno = ''
+        locate('pageno',vars;vi) then pageno = vals<vi> else pageno = ''
+        locate('basejobno',vars;vi) then basejobno = vals<vi> else basejobno = ''
+        locate('colno',vars;vi) then colno = vals<vi> else colno = ''
+        locate('filter',vars;vi) then filter = vals<vi> else filter = ''
+    *
+        userrole = oconv(userid,'tuser;x;;15')
+        username = oconv(userid,'tuser;x;;1')
+        acctname=oconv('account','ttable;x;;1')
+    *
+        if index(navs,button,1) and button ne '' then nav = true else nav = false; * Determine if action is navigation
+        if index(sorts,button,1) and button ne '' then sortcol = true else sortcol = false; * Sorting actio1970250674sn
+    *
+    * Main entry point
+        begin case
+            case button = 'excel'; gosub excel
+            case jobno = ''; gosub loadpage
+            case 1; gosub buildreply
+        end case
+    *
+        stop
+    *
+    ***********************************************************
+    * Loads the inquiry page with prompts
+    loadpage:
+    ***********************************************************
+    *
+    * Assemble page
+    *
+        html = ''
+        call wstplinsert('ws.inq','',html)
+    *
+    * Send to client
+        html = swap(html,@am,char(10))
+        call web.send(html)
+    *
+        return
+    *
+    ***********************************************************
+    * Returns excel from section
+    excel:
+    ***********************************************************
+    *
+        url = 'm=get&action=send&src=output&id=1970045202.xlsx'
+        json = '{"success": "true","url": "':url:'"}'
+        call web.send(json)
+    
+    ***        selects = userjob<15,jj>
+    ***        verb.filename = userjob<16,jj>
+    ***        selcrit.sortby = userjob<17,jj>
+    ***        output.list = userjob<18,jj>
+    ****
+    ****
+    **** Perform selects
+    ***        cmd = ''; skip.sort = 0
+    ***        selects.amc = dcount(selects,@am)
+    ***        for ii = 1 to selects.amc
+    ***          line = selects<ii>
+    ***          tag = field(line,' ',1)
+    ***          tag = field(line,',',1)
+    ***          begin case
+    ***            case line = ''
+    ***            case line[1,3] = '%if'
+    ***            case tag = 'p'
+    ***              convert @am to ' ' in cmd
+    ***              execute cmd capturing rpt returning errno
+    ***              if errno = '401' then skip.sort = 1; ii = selects.amc; * Don't create output
+    ***              cmd = ''
+    ***            case 1
+    ***              cmd<-1> = line
+    ***          end case
+    ***        next ii
+    ****
+    **** Execute sort command
+    ***        if skip.sort then
+    ***          execute 'who'
+    ***          rpt = ''
+    ***        end else
+    ****
+    **** If sort action is active
+    **** Change sort command to select command
+    ***          if sortcol then
+    ***            sortcmd = userjob<16,jj>
+    ***            sortcmd = swap(sortcmd,'listt','select')
+    ***            sortcmd = swap(sortcmd,'sortt','sselect')
+    ***            if userjob<17,jj> ne '' then
+    ***              sortcmd<-1> = userjob<17,jj>; * additional sel-crit and sort
+    ***            end
+    ***            convert @am to ' ' in sortcmd
+    ***            crt 'sort changed to select: ':sortcmd
+    ***            execute sortcmd capturing rpt returning errno
+    ****
+    **** Build resort command
+    ***            sortcmd = userjob<16,jj>
+    ***            sortcols.svmc = dcount(userjob<20,jj>,@svm)
+    ***            for kk = 1 to sortcols.svmc
+    ***              sortcolno = userjob<20,jj,kk>
+    ***              colvalue = trim(userjob<18,jj,sortcolno>)
+    ***              sortcode = userjob<19,jj,sortcolno>
+    ***              if index(colvalue,' ',1) then
+    ***                dictid = field(colvalue,' ',2)
+    ***              end else
+    ***                dictid = colvalue
+    ***              end
+    ***              begin case
+    ***                case sortcode = 'sortasc'; sortcmd<-1> = 'by ':dictid
+    ***                case sortcode = 'sortdesc'; sortcmd<-1> = 'by-dsnd ':dictid
+    ***              end case
+    ***            next kk
+    ***            if userjob<17,jj> ne '' then
+    ***              sortcmd<-1> = userjob<17,jj>
+    ***            end
+    ***            sortcmd<-1> = userjob<18,jj>
+    ***            sortcmd<-1> = 'id-supp hdr-supp ni-supp'
+    ***            convert @am to ' ' in sortcmd
+    ***            convert @svm to ' ' in sortcmd
+    ***            crt 'resort cmd: ':sortcmd
+    ***          end
+    ***          execute sortcmd capturing rpt returning errno
+    ***        end
+    ***      end
+    
+    *
+        return
+    *
+    ***********************************************************
+    buildreply:
+    ***********************************************************
+    *
+    * Build breadcrumbs
+        basejob = ''
+        breadcrumb.elements = ''
+        if basejobno = '' then basejobno = jobno; * Set to first job
+        read basejob from userjobsf,basejobno then
+            if basejob<11> = '' then basejob<11> = basejobno
+    *
+    * Adjust breadcrumbs if going backwards
+            locate(jobno,basejob,11;bjj) then
+            newbc = ''
+            for jj = 1 to bjj
+                newbc<1,-1> = basejob<11,jj>
+            next jj
+            basejob<11> = newbc
+            end else
+            basejob<11,-1> = jobno
+            end
+            breadcrumbs.vmc = dcount(basejob<11>,@vm)
+            for jj = 1 to breadcrumbs.vmc
+            bcjobno = basejob<11,jj>
+            bcprocid = oconv(bcjobno,'tuserjobs;x;;1')
+            hover = oconv(bcprocid,'tproc;x;;2')
+            breadcrumb.elements<-1> = '{"bcjobno": "':bcjobno:'","label": "':bcprocid:'","hover":"':hover:'"}'
+            next jj
+            write basejob on userjobsf,basejobno
+        end
+    *
+    * Read current userjob item
+        read userjob from userjobsf,jobno else
+            errmsg = 'Cant read USERJOB# ':jobno
+            goto errmsg
+        end
+    *
+        procname = userjob<1>
+        a = userjob<2>
+    *
+    * Read the proc for this userjob
+        read proc from procf,procname else
+            errmsg = 'cant read PROC item ':procname
+            goto errmsg
+        end
+    *
+    * Extract inquiry elements and perform substitutions
+        title = proc<81>
+        inq = title; gosub substitutions; title = inq
+        controls = proc<82>
+        secnos = proc<85>
+        divs = proc<86>
+        inq = divs; gosub substitutions; divs = inq
+        pagingnos = proc<87>
+        selsorts = proc<88>
+        inq = selsorts; gosub substitutions; selsorts = inq
+        colspec = proc<89>
+        inq = colspec; gosub substitutions; colspec = inq
+    *
+    * Build page heading
+        control.elements = ''
+        control.elements<-1> = '{"id": "back","icon": "arrow_back_ios","color": "blue","label": "Back"}'
+        control.elements<-1> = '{"id": "refresh","icon": "sync","color": "green","label": "Refesh"}'
+        control.elements<-1> = '{"id": "print","icon": "print","color": "black","label": "Print"}'
+        control.elements<-1> = '{"id": "close","icon": "cancel","color": "red","label": "Close"}'
+        convert @am to ',' in control.elements
+        convert @am to ',' in breadcrumb.elements
+        title.controls = '"title": "':title:'","controls":[':control.elements:'],"breadcrumbs":[':breadcrumb.elements:']'
+    *
+    * Div headings, select and sorts, output
+        sections = ''
+        secnos.vmc = dcount(secnos,@vm)
+        for jj = 1 to secnos.vmc
+            secno = secnos<1,jj>; * Section# (controlling attr#)
+    *
+    * Skip section if navigating, sorting, filtering, or doing excel
+            if nav and secno ne sectionno then goto next.section
+            if sortcol and secno ne sectionno then goto next.section
+            if button = 'excel' and secno ne sectionno then goto next.section
+            if button = 'filter' and secno ne sectionno then goto next.section
+            if button = 'clearfilters' then
+            if secno ne sectionno then goto next.section
+            userjob<21,jj> = ''; * Clear filters from section
+            end
+    *
+            div = divs<1,jj>
+            paging = pagingnos<1,jj>
+            script = selsorts<1,jj>
+            cols = colspec<1,jj>
+    *
+    * Call a program to create the section content instead of creating a script
+            program.called = false
+            if script[1,1] = '@' then
+            progname = script[2,999]
+            call @progname(jobno,rpt,cols)
+            program.called = true
+            end
+    *
+    * Sum the column widths so the widths can be percentages
+            total.widths = 0
+            cols.svmc = dcount(cols,@svm)
+            for kk = 1 to cols.svmc
+            line = cols<1,1,kk>
+            convert '*' to @am in line
+            width = line<3>
+            total.widths += width
+            next kk
+    *
+    * Set up the headings and add to the script
+            headspec = ''
+            output.list = ''
+            cols.svmc = dcount(cols,@svm)
+            for kk = 1 to cols.svmc
+            line = cols<1,1,kk>
+            convert '*' to @am in line
+            dictid = line<1>
+            colhead = line<2>
+            width = line<3>
+            width.percent = (width / total.widths) * 100; * Convert to percent
+            width = iconv(width.percent,'mr0')
+            just = line<4>
+            link = line<5>
+    *
+    * Update the column sort, sort sequence, or filter
+    *   19 is sortasc or sortdesc in the column position
+    *   20 is the sort column sequence
+    *   21 is the filter string
+            if sortcol and secno = sectionno and colno = kk then
+                if userjob<19,jj,kk> = button then
+                userjob<19,jj,kk> = ''
+                locate(kk,userjob,20,jj;ujk) then
+                    userjob = delete(userjob,20,jj,ujk)
+                end
+                end else
+                userjob<19,jj,kk> = button
+                locate(kk,userjob,20,jj;ujk) then
+                    userjob = delete(userjob,20,jj,ujk)
+                end
+                userjob<20,jj,-1> = kk
+                end
+            end
+            sortby = userjob<19,jj,kk>
+            if button = 'filter' and colno = kk then
+                userjob<21,jj,kk> = filter
+            end
+            colfilter = userjob<21,jj,kk>
+    *
+            elements = ''
+            elements<-1> = '"label": "':colhead:'"'
+            elements<-1> = '"width": "':width:'"'
+            elements<-1> = '"just": "':just:'"'
+            elements<-1> = '"colno": "':kk:'"'
+            elements<-1> = '"sortby": "':sortby:'"'
+            elements<-1> = '"filter": "':colfilter:'"'
+    *
+            param=field(link,'(',2)
+            param=field(param,')',1)
+            num.param = dcount(param,' ')
+            if num.param < 1 then num.param = 1
+    *
+            linktype = field(link,'(',1)
+            begin case
+                case linktype = 'module';* module({moduleid})
+                moddesc=oconv(param,'tmodule;x;;1')
+                modwidth=oconv(param,'tmodule;x;;17')+60
+                modheight=oconv(param,'tmodule;x;;18')+90
+                elements<-1> = '"link": "':linktype:'"'
+                elements<-1> = '"module": "':param:'"'
+                elements<-1> = '"module_width": "':modwidth:'"'
+                elements<-1> = '"module_height": "':modheight:'"'
+                case linktype = 'modbutton'; * modbutton({moduleid};optional-label)
+                moddesc = field(param,';',2)
+                param = field(param,';',1)
+                if moddesc = '' then
+                    moddesc=oconv(param,'tmodule;x;;1')
+                end
+                modwidth=oconv(param,'tmodule;x;;17')+60
+                modheight=oconv(param,'tmodule;x;;18')+90
+                elements<-1> = '"link": "':linktype:'"'
+                elements<-1> = '"module": "':param:'"'
+                elements<-1> = '"button_label": "':moddesc:'"'
+                elements<-1> = '"module_width": "':modwidth:'"'
+                elements<-1> = '"module_height": "':modheight:'"'
+                case linktype = 'doclink'
+                elements<-1> = '"doclink": "true"'
+                case link ne ''
+                elements<-1> = '"link": "':link:'"'
+            end case
+    *
+            convert @am to ',' in elements
+            headspec<-1> = '{':elements:'}'
+            if program.called = false then
+                output.list<-1> = dictid; * add to execute command
+            end
+            next kk
+    *
+            if not(program.called) then
+    *
+    * Isolate the selects from sorts
+            sortcmd = ''; selects = ''; selects.done = 0
+            verb.filename = ''; selcrit.sortby = ''
+            script.svmc = dcount(script,@svm)
+            for kk = 1 to script.svmc
+                line = script<1,1,kk>
+                if line[1,5] = 'sortt' or line[1,5] = 'listt' or selects.done then
+                sortcmd<-1> = line
+                selects.done = 1
+    *
+    * Parse sort line for excel and resorts
+                if line[1,5] = 'sortt' or line[1,5] = 'listt' then
+                    sortline = line
+                    convert ' ' to @am in sortline
+                    sortline.amc = dcount(sortline,@am)
+                    for ii = 1 to sortline.amc
+                    word = sortline<ii>
+                    begin case
+                        case word = 'sortt' or word = 'listt'
+                        verb.filename<-1> = word
+                        verb.filename<-1> = sortline<ii+1>
+                        ii += 1
+                        case word = 'using'
+                        verb.filename<-1> = word
+                        verb.filename<-1> = sortline<ii+1>
+                        ii += 1
+                        case word[1,1] = "'"; verb.filename<-1> = word
+                        case 1
+                        selcrit.sortby<-1> = word
+                    end case
+                    next ii
+                end
+                end else
+                selects<-1> = line
+                end
+            next kk
+    * Update userjob with selects, sorts, and output list
+            ujselects = selects
+            convert @am to @svm in ujselects
+            userjob<15,jj> = ujselects
+    *
+            ujverb.list = verb.filename
+            convert @am to ' ' in ujverb.list
+            userjob<16,jj> = ujverb.list
+    *
+            ujsel.list = selcrit.sortby
+            convert @am to ' ' in ujsel.list
+            userjob<17,jj> = ujsel.list
+    *
+            ujoutput.list = output.list
+            convert @am to @svm in ujoutput.list
+            userjob<18,jj> = ujoutput.list
+    *
+            sortcmd<-1> = output.list
+            sortcmd<-1> = 'id-supp hdr-supp ni-supp'
+            convert @am to ' ' in sortcmd
+    *
+    * Perform selects
+            cmd = ''; skip.sort = 0
+            selects.amc = dcount(selects,@am)
+            for ii = 1 to selects.amc
+                line = selects<ii>
+                tag = field(line,' ',1)
+                tag = field(line,',',1)
+                begin case
+                case line = ''
+                case line[1,3] = '%if'
+                case tag = 'p'
+                    convert @am to ' ' in cmd
+                    execute cmd capturing rpt returning errno
+                    if errno = '401' then skip.sort = 1; ii = selects.amc; * Don't create output
+                    cmd = ''
+                case 1
+                    cmd<-1> = line
+                end case
+            next ii
+    *
+    * Execute sort command
+            if skip.sort then
+                execute 'who'
+                rpt = ''
+            end else
+    *
+    * If sort action is active
+    * Change sort command to select command
+                if userjob<20,jj> ne '' then
+                sortcmd = userjob<16,jj>
+                sortcmd = swap(sortcmd,'listt','select')
+                sortcmd = swap(sortcmd,'sortt','sselect')
+                if userjob<17,jj> ne '' then
+                    sortcmd<-1> = userjob<17,jj>; * additional sel-crit and sort
+                end
+                convert @am to ' ' in sortcmd
+                crt 'sort changed to select: ':sortcmd
+                execute sortcmd capturing rpt returning errno
+    *
+    * Build resort command
+                sortcmd = userjob<16,jj>
+                sortcols.svmc = dcount(userjob<20,jj>,@svm)
+                for kk = 1 to sortcols.svmc
+                    sortcolno = userjob<20,jj,kk>
+                    colvalue = trim(userjob<18,jj,sortcolno>)
+                    sortcode = userjob<19,jj,sortcolno>
+                    if index(colvalue,' ',1) then
+                    dictid = field(colvalue,' ',2)
+                    end else
+                    dictid = colvalue
+                    end
+                    begin case
+                    case sortcode = 'sortasc'; sortcmd<-1> = 'by ':dictid
+                    case sortcode = 'sortdesc'; sortcmd<-1> = 'by-dsnd ':dictid
+                    end case
+                next kk
+                if userjob<17,jj> ne '' then
+                    sortcmd<-1> = userjob<17,jj>
+                end
+                sortcmd<-1> = userjob<18,jj>
+                sortcmd<-1> = 'id-supp hdr-supp ni-supp'
+                convert @am to ' ' in sortcmd
+                convert @svm to ' ' in sortcmd
+                crt 'resort cmd: ':sortcmd
+                end
+                execute sortcmd capturing rpt returning errno
+            end
+            end
+    *
+    * Build json from output
+            convert @vm to @svm in rpt
+            convert char(9) to @vm in rpt
+            convert char(13) to @am in rpt
+            rpt = swap(rpt,'<br>','_+')
+    *
+            headspec.amc = dcount(headspec,@am); * Number of columns
+            rows = ''
+            rpt.amc = dcount(rpt,@am)-1
+            for ii = 1 to rpt.amc
+            row = trim(rpt<ii>)
+            if row ne '' then
+                values = ''
+                for rj = 1 to headspec.amc
+                value = row<1,rj>
+                value = swap(value,@svm,'_+')
+                values<-1> = '{"colno": "':rj:'","value": "':value:'"}'
+                next rj
+                convert @am to ',' in values
+                rows<-1> = '{"rowid": "':ii:'","values": [':values:']}'
+            end
+            next ii
+    *
+    * Build the output section
+    *   If section has paging, check for navigation action
+            num.rows = dcount(rows,@am)
+            pages = ''
+            if paging ne '' then
+            pages = num.rows / paging
+            if int(pages) ne pages then
+                pages = int(pages) + 1
+            end
+    * Change current page
+            if nav then
+                begin case
+                case button = 'chgpg'
+                    if newpageno >= 1 and newpageno <= pages then
+                    pageno = int(newpageno)
+                    end
+                case button = 'firstpg'
+                    pageno = 1
+                case button = 'prevpg'
+                    if pageno ne 1 then pageno -= 1
+                case button = 'nextpg'
+                    if pageno ne pages then pageno += 1
+                case button = 'lastpg'
+                    pageno = pages
+                end case
+            end else
+    * Use current page or set to 1
+                if userjob<12,jj> = '' then
+                pageno = 1
+                end else
+                pageno = userjob<12,jj>
+                end
+            end
+    *
+            begin.rowno = paging * pageno - paging + 1
+            end.rowno = paging * pageno
+            output = ''
+            for ii = begin.rowno to end.rowno
+                if rows<ii> ne '' then output<-1> = rows<ii>
+            next ii
+            end else
+            output = rows
+            end
+            convert @am to ',' in headspec
+            convert @am to ',' in output
+            convert '*' to @am in div
+            section = '{"sectionid": "':secno:'"'
+            if div<2> ne '' then section<-1> = '"heading": "':div<2>:'"'
+            if div<3> ne '' then section<-1> = '"anchor": "':div<3>:'"'
+            if div<4> ne '' then section<-1> = '"excel": "true"'
+            if div<5> ne '' then section<-1> = '"sortable": "true"'
+            if div<6> ne '' then section<-1> = '"filters": "true"'
+            if paging ne '' then section<-1> = '"paging": "':paging:'"'
+            if paging ne '' then section<-1> = '"pageno": "':pageno:'"'
+            if paging ne '' then section<-1> = '"pages": "':pages:'"'
+            section<-1> = '"colheads": [':headspec:']'
+            section<-1> = '"output": [':output:']}'
+            convert @am to ',' in section
+    *
+            sections<-1> = section
+            userjob<12,jj> = pageno
+            userjob<13,jj> = pages
+            userjob<14,jj> = paging
+    next.section:
+        next jj
+    * Update userjob
+        write userjob on userjobsf,jobno
+    *
+        convert @am to ',' in sections
+        sections = '"sections": [':sections:']'
+        json = '{':title.controls:',':sections:'}'
+        call web.send(json)
+        stop
+    
+    **************************************************************************
+    errmsg: ; * Error message
+    **************************************************************************
+        json = '{"success": "false","errmsg": "':errmsg:'"}'
+        call web.send(json)
+        stop
+    *
+    *-------------------------------------------------------------------------
+    * Process proc inputs
+    *-------------------------------------------------------------------------
+    substitutions:
+        pl=''
+        inq.vmc = dcount(inq,@vm)
+        for j = 1 to inq.vmc
+            line = inq<1,j>
+            line.svmc = dcount(inq,@svm)
+            for k = 1 to line.svmc
+            uline=inq<1,j,k>
+            if uline[1,1]='*' then goto nextline
+            begin case
+                case uline[1,2]='%$'
+                attrno=field(uline[3,99],' ',1)
+                value=field(uline,' ',2)
+                if num(attrno) then
+                    if attrno>0 and attrno<100 then a<1,attrno>=value
+                end
+                uline=''
+                case field(uline,' ',1)='%a'
+                for zz=1 to dcount(a,@vm)
+                    capt<-1>='a(':zz:')="':a<1,zz>:'"'
+                next zz
+                uline=''
+                case field(uline,' ',1)='%if'
+                case uline[1,1]='%'
+                progname=uline[2,99]
+                call @progname(a)
+                uline=''
+            end case
+            loop pos=index(uline,'\',1) while pos do
+                beg=uline[1,pos-1]
+                pre=field(beg,' ',dcount(beg,' '))
+                beg=beg[1,col1()]
+                aval=field(uline[pos+1,99],' ',1)
+                code=oconv(aval,'mcn')
+                if code='' then
+                code=aval[1,1]
+                end
+                after=uline[pos+len(code)+1,99]
+                suf=field(after,' ',1)
+                after=after[col2(),99]
+                value=''
+                begin case
+                case num(code)
+                    if a<1,code>='' then
+                    if pre='' then
+                        value=''
+                    end else
+                        value=pre:suf
+                    end
+                    end else
+                    for jj=1 to 999 until a<1,code,jj>=''
+                        if pre='' and a<1,code,jj+1>='' then
+                        value=value:a<1,code,jj>
+                        end else
+                        value=value:pre:a<1,code,jj>:suf
+                        end
+                    next jj
+                    end
+                case code='g'
+                    for jj=1 to 999 until proc<4,jj>=''
+                    value=value:proc<4,jj>:' '
+                    next jj
+                case code='u'; value=pre:userid:suf
+                case code='p'; value=pre:system(22):suf; *--- pib#
+                case code='j'; value=pre:jobno:suf; *[8]
+                case code='c'; value=pre:oconv(userid,'tuser;x;;35'):suf; * User current cust#
+                case code='t'; value=pre:oconv(userid,'tuser;x;;15'):suf; * User type
+                case code='b'; value=pre:oconv(userid,'tuser;x;;38'):suf; * User branch
+                case code='d'; value=pre:oconv(userid,'tuser;x;;39'):suf; * user division
+                case code='a'; value=pre:oconv('account','ttable;x;;1'):suf; * Account name
+                case code='q'
+                    open 'qcuser' to qcuserf then
+                    read qcuser from qcuserf,userid then
+                        qcuser.vmc = dcount(qcuser<1>,@vm)
+                        for kk = 1 to qcuser.vmc
+                        value := pre:qcuser<1,kk>:suf
+                        next kk
+                    end
+                    end
+                    if value = '' then value = pre:suf
+                end case
+                uline=beg:value:after
+            repeat
+    *-------------------------------------------------------------------------
+    * If statements
+    *-------------------------------------------------------------------------
+    evaluate:
+            begin case
+                case trim(uline[1,4]) = 'if "'
+                evalline = uline
+                convert '"' to @am in evalline
+                value1 = '"':evalline<2>:'"'
+                operator = trim(evalline<3>)
+                value2 = '"':evalline<4>:'"'
+                uline = trim(oconv(uline,'g4"999'))
+                if value2='null' then value2=''
+                if debug.on then
+                    crt 'eval:   ':evalline
+                    crt 'value1: ':value1
+                    crt 'oper:   ':operator
+                    crt 'value2: ':value2
+                    crt 'uline:  ':uline
+                end
+                begin case
+                    case operator='='
+                    if value1 # value2 then uline=''
+                    case operator='#'
+                    if value1 = value2 then uline=''
+                end case
+                if debug.on then crt 'post eval ':uline; input trash
+                goto evaluate
+                case trim(uline[1,3]) = 'if'
+                value1=field(uline,' ',2)
+                operator=field(uline,' ',3)
+                value2=field(uline,' ',4)
+                uline=uline[col2()+1,9999]
+                if value2='null' then value2=''
+                begin case
+                    case operator='='
+                    if value1 # value2 then uline=''
+                    case operator='#'
+                    if value1 = value2 then uline=''
+                end case
+                goto evaluate
+            end case
+    *
+            if trim(uline) ne '' then
+                pl<1,j,k>=uline
+            end
+    *
+    nextline:
+            next k
+        next j
+    *
+        inq=pl
+        return
+ </div>
+ <div id="commandline" style="position: absolute; bottom: 10px; height: 20px; width: 800px;"></div>
+    
+<script src="https://ajaxorg.github.io/ace-builds/src/ace.js" type="text/javascript" charset="utf-8"></script>
+<script src="https://ajaxorg.github.io/ace-builds/src/ext-language_tools.js" type="text/javascript" charset="utf-8"></script>
+<script src="js/ace-pick.js" type="text/javascript"></script>
+
+</body>
+</html>

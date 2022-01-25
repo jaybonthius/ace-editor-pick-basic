@@ -1,0 +1,733 @@
+    *
+    * MFG INQUIRY PROCESSOR
+    * 11-10-21*CGB - 37 YEARS!
+    *
+    * A GREAT WAY TO INSPECT INQUIRIES IS TO GET THE JOB# FROM THE MONITOR
+    * AND THEN ENTER: "WATCH CT USERJOBS {JOB#}" AT TCL.
+    * YOU CAN THEN SEE THE UPDATES IN REALTIME.
+    *
+        CLEAR
+    *
+        TRUE=1; FALSE=0
+    *
+        WSROOT.PATH = OCONV('ROOT.PATH','TMD;X;;3')
+        UFOUTPUT.PATH = OCONV('UFOUTPUT','TMD;X;;3')
+        NAVS = 'FIRSTPG|PREVPG|NEXTPG|LASTPG|CHGPG'; * NAVIGATION BUTTON VALUES
+        SORTS = 'SORTASC|SORTDESC'; * SORTING BUTTON VALUES
+    *
+        OPEN 'UFOUTPUT' TO UFOUTPUTF ELSE STOP 201,'UFOUTPUT'
+        
+        OPEN 'TEMP' TO TEMPF ELSE STOP 201,'TEMP'
+        OPEN 'TEMP' TO TEMPF ELSE STOP 201,'TEMP'
+
+
+        OPEN 'WSTPL' TO WSTPLF ELSE STOP 201,'WSTPL'
+        OPEN 'MFGTPL' TO MFGTPLF ELSE STOP 201,'MFGTPL'
+        OPEN 'WEBVARS' TO WEBVARSF ELSE STOP 201,'WEBVARS'
+        OPEN 'MENUS' TO MENUSF ELSE STOP 201,'MENUS'
+        OPEN 'USER' TO USERF ELSE STOP 201,'USER'
+        OPEN 'USERJOBS' TO USERJOBSF ELSE STOP 201,'USERJOBS'
+        OPEN 'PROC' TO PROCF ELSE STOP 201,'PROC'
+    *
+        TCLREAD CMD
+        SESSION.ID = FIELD(CMD,' ',2)
+        CALL GETVARS(SESSION.ID,VARS,VALS)
+    *
+        LOCATE('OP',VARS;VI) THEN OP = VALS<VI> ELSE OP = ''
+        LOCATE('USER_ID',VARS;VI) THEN USERID = VALS<VI> ELSE USERID = ''
+        LOCATE('JOBNO',VARS;VI) THEN JOBNO = VALS<VI> ELSE JOBNO = ''
+        LOCATE('BUTTON',VARS;VI) THEN BUTTON = VALS<VI> ELSE BUTTON=''
+        LOCATE('SECTION',VARS;VI) THEN SECTIONNO = VALS<VI> ELSE SECTIONNO = ''
+        LOCATE('PAGENO',VARS;VI) THEN PAGENO = VALS<VI> ELSE PAGENO = ''
+        LOCATE('BASEJOBNO',VARS;VI) THEN BASEJOBNO = VALS<VI> ELSE BASEJOBNO = ''
+        LOCATE('COLNO',VARS;VI) THEN COLNO = VALS<VI> ELSE COLNO = ''
+        LOCATE('FILTER',VARS;VI) THEN FILTER = VALS<VI> ELSE FILTER = ''
+    *
+    
+        USERROLE = OCONV(USERID,'TUSER;X;;15')
+        USERNAME = OCONV(USERID,'TUSER;X;;1')
+        ACCTNAME=OCONV('ACCOUNT','TTABLE;X;;1')
+    *
+        IF INDEX(NAVS,BUTTON,1) AND BUTTON NE '' THEN NAV = TRUE ELSE NAV = FALSE; * DETERMINE IF ACTION IS NAVIGATION
+        IF INDEX(SORTS,BUTTON,1) AND BUTTON NE '' THEN SORTCOL = TRUE ELSE SORTCOL = FALSE; * SORTING ACTIO1970250674SN
+    *
+    * MAIN ENTRY POINT
+        BEGIN CASE
+            CASE BUTTON = 'EXCEL'; GOSUB EXCEL
+            CASE JOBNO = ''; GOSUB LOADPAGE
+            CASE 1; GOSUB BUILDREPLY
+        END CASE
+    *
+        STOP
+    *
+    ***********************************************************
+    * LOADS THE INQUIRY PAGE WITH PROMPTS
+    LOADPAGE:
+    ***********************************************************
+    *
+    * ASSEMBLE PAGE
+    *
+        HTML = ''
+        CALL WSTPLINSERT('WS.INQ','',HTML)
+    *
+    * SEND TO CLIENT
+        HTML = SWAP(HTML,@AM,CHAR(10))
+        CALL WEB.SEND(HTML)
+    *
+        RETURN
+    *
+    ***********************************************************
+    * RETURNS EXCEL FROM SECTION
+    EXCEL:
+    ***********************************************************
+    *
+        URL = 'M=GET&ACTION=SEND&SRC=OUTPUT&ID=1970045202.XLSX'
+        JSON = '{"SUCCESS": "TRUE","URL": "':URL:'"}'
+        CALL WEB.SEND(JSON)
+    
+    ***        SELECTS = USERJOB<15,JJ>
+    ***        VERB.FILENAME = USERJOB<16,JJ>
+    ***        SELCRIT.SORTBY = USERJOB<17,JJ>
+    ***        OUTPUT.LIST = USERJOB<18,JJ>
+    ****
+    ****
+    **** PERFORM SELECTS
+    ***        CMD = ''; SKIP.SORT = 0
+    ***        SELECTS.AMC = DCOUNT(SELECTS,@AM)
+    ***        FOR II = 1 TO SELECTS.AMC
+    ***          LINE = SELECTS<II>
+    ***          TAG = FIELD(LINE,' ',1)
+    ***          TAG = FIELD(LINE,',',1)
+    ***          BEGIN CASE
+    ***            CASE LINE = ''
+    ***            CASE LINE[1,3] = '%IF'
+    ***            CASE TAG = 'P'
+    ***              CONVERT @AM TO ' ' IN CMD
+    ***              EXECUTE CMD CAPTURING RPT RETURNING ERRNO
+    ***              IF ERRNO = '401' THEN SKIP.SORT = 1; II = SELECTS.AMC; * DON'T CREATE OUTPUT
+    ***              CMD = ''
+    ***            CASE 1
+    ***              CMD<-1> = LINE
+    ***          END CASE
+    ***        NEXT II
+    ****
+    **** EXECUTE SORT COMMAND
+    ***        IF SKIP.SORT THEN
+    ***          EXECUTE 'WHO'
+    ***          RPT = ''
+    ***        END ELSE
+    ****
+    **** IF SORT ACTION IS ACTIVE
+    **** CHANGE SORT COMMAND TO SELECT COMMAND
+    ***          IF SORTCOL THEN
+    ***            SORTCMD = USERJOB<16,JJ>
+    ***            SORTCMD = SWAP(SORTCMD,'LISTT','SELECT')
+    ***            SORTCMD = SWAP(SORTCMD,'SORTT','SSELECT')
+    ***            IF USERJOB<17,JJ> NE '' THEN
+    ***              SORTCMD<-1> = USERJOB<17,JJ>; * ADDITIONAL SEL-CRIT AND SORT
+    ***            END
+    ***            CONVERT @AM TO ' ' IN SORTCMD
+    ***            CRT 'SORT CHANGED TO SELECT: ':SORTCMD
+    ***            EXECUTE SORTCMD CAPTURING RPT RETURNING ERRNO
+    ****
+    **** BUILD RESORT COMMAND
+    ***            SORTCMD = USERJOB<16,JJ>
+    ***            SORTCOLS.SVMC = DCOUNT(USERJOB<20,JJ>,@SVM)
+    ***            FOR KK = 1 TO SORTCOLS.SVMC
+    ***              SORTCOLNO = USERJOB<20,JJ,KK>
+    ***              COLVALUE = TRIM(USERJOB<18,JJ,SORTCOLNO>)
+    ***              SORTCODE = USERJOB<19,JJ,SORTCOLNO>
+    ***              IF INDEX(COLVALUE,' ',1) THEN
+    ***                DICTID = FIELD(COLVALUE,' ',2)
+    ***              END ELSE
+    ***                DICTID = COLVALUE
+    ***              END
+    ***              BEGIN CASE
+    ***                CASE SORTCODE = 'SORTASC'; SORTCMD<-1> = 'BY ':DICTID
+    ***                CASE SORTCODE = 'SORTDESC'; SORTCMD<-1> = 'BY-DSND ':DICTID
+    ***              END CASE
+    ***            NEXT KK
+    ***            IF USERJOB<17,JJ> NE '' THEN
+    ***              SORTCMD<-1> = USERJOB<17,JJ>
+    ***            END
+    ***            SORTCMD<-1> = USERJOB<18,JJ>
+    ***            SORTCMD<-1> = 'ID-SUPP HDR-SUPP NI-SUPP'
+    ***            CONVERT @AM TO ' ' IN SORTCMD
+    ***            CONVERT @SVM TO ' ' IN SORTCMD
+    ***            CRT 'RESORT CMD: ':SORTCMD
+    ***          END
+    ***          EXECUTE SORTCMD CAPTURING RPT RETURNING ERRNO
+    ***        END
+    ***      END
+    
+    *
+        RETURN
+    *
+    ***********************************************************
+    BUILDREPLY:
+    ***********************************************************
+    *
+    * BUILD BREADCRUMBS
+        BASEJOB = ''
+        BREADCRUMB.ELEMENTS = ''
+        IF BASEJOBNO = '' THEN BASEJOBNO = JOBNO; * SET TO FIRST JOB
+        READ BASEJOB FROM USERJOBSF,BASEJOBNO THEN
+            IF BASEJOB<11> = '' THEN BASEJOB<11> = BASEJOBNO
+    *
+    * ADJUST BREADCRUMBS IF GOING BACKWARDS
+            LOCATE(JOBNO,BASEJOB,11;BJJ) THEN * BLAH
+            NEWBC = ''
+            FOR JJ = 1 TO BJJ
+                NEWBC<1,-1> = BASEJOB<11,JJ>
+            NEXT JJ
+            BASEJOB<11> = NEWBC
+            END ELSE
+            BASEJOB<11,-1> = JOBNO
+            END
+            BREADCRUMBS.VMC = DCOUNT(BASEJOB<11>,@VM)
+            FOR JJ = 1 TO BREADCRUMBS.VMC
+            BCJOBNO = BASEJOB<11,JJ>
+            BCPROCID = OCONV(BCJOBNO,'TUSERJOBS;X;;1')
+            HOVER = OCONV(BCPROCID,'TPROC;X;;2')
+            BREADCRUMB.ELEMENTS<-1> = '{"BCJOBNO": "':BCJOBNO:'","LABEL": "':BCPROCID:'","HOVER":"':HOVER:'"}'
+            NEXT JJ
+            WRITE BASEJOB ON USERJOBSF,BASEJOBNO
+        END
+    *
+    * READ CURRENT USERJOB ITEM
+        READ USERJOB FROM USERJOBSF,JOBNO ELSE
+            ERRMSG = 'CANT READ USERJOB# ':JOBNO
+            GOTO ERRMSG
+        END
+    *
+        PROCNAME = USERJOB<1>
+        A = USERJOB<2>
+    *
+    * READ THE PROC FOR THIS USERJOB
+        READ PROC FROM PROCF,PROCNAME ELSE
+            ERRMSG = 'CANT READ PROC ITEM ':PROCNAME
+            GOTO ERRMSG
+        END
+    *
+    * EXTRACT INQUIRY ELEMENTS AND PERFORM SUBSTITUTIONS
+        TITLE = PROC<81>
+        INQ = TITLE; GOSUB SUBSTITUTIONS; TITLE = INQ
+        CONTROLS = PROC<82>
+        SECNOS = PROC<85>
+        DIVS = PROC<86>
+        INQ = DIVS; GOSUB SUBSTITUTIONS; DIVS = INQ
+        PAGINGNOS = PROC<87>
+        SELSORTS = PROC<88>
+        INQ = SELSORTS; GOSUB SUBSTITUTIONS; SELSORTS = INQ
+        COLSPEC = PROC<89>
+        INQ = COLSPEC; GOSUB SUBSTITUTIONS; COLSPEC = INQ
+    
+    *
+    * BUILD PAGE HEADING
+        CONTROL.ELEMENTS = ''
+        CONTROL.ELEMENTS<-1> = '{"ID": "BACK","ICON": "ARROW_BACK_IOS","COLOR": "BLUE","LABEL": "BACK"}'
+        CONTROL.ELEMENTS<-1> = '{"ID": "REFRESH","ICON": "SYNC","COLOR": "GREEN","LABEL": "REFESH"}'
+        CONTROL.ELEMENTS<-1> = '{"ID": "PRINT","ICON": "PRINT","COLOR": "BLACK","LABEL": "PRINT"}'
+        CONTROL.ELEMENTS<-1> = '{"ID": "CLOSE","ICON": "CANCEL","COLOR": "RED","LABEL": "CLOSE"}'
+        CONVERT @AM TO ',' IN CONTROL.ELEMENTS
+        CONVERT @AM TO ',' IN BREADCRUMB.ELEMENTS
+        TITLE.CONTROLS = '"TITLE": "':TITLE:'","CONTROLS":[':CONTROL.ELEMENTS:'],"BREADCRUMBS":[':BREADCRUMB.ELEMENTS:']'
+    *
+    * DIV HEADINGS, SELECT AND SORTS, OUTPUT
+        SECTIONS = ''
+        SECNOS.VMC = DCOUNT(SECNOS,@VM)
+        FOR JJ = 1 TO SECNOS.VMC
+            SECNO = SECNOS<1,JJ>; * SECTION# (CONTROLLING ATTR#)
+    *
+    * SKIP SECTION IF NAVIGATING, SORTING, FILTERING, OR DOING EXCEL
+            IF NAV AND SECNO NE SECTIONNO THEN GOTO NEXT.SECTION
+            IF SORTCOL AND SECNO NE SECTIONNO THEN GOTO NEXT.SECTION
+            IF BUTTON = 'EXCEL' AND SECNO NE SECTIONNO THEN GOTO NEXT.SECTION
+            IF BUTTON = 'FILTER' AND SECNO NE SECTIONNO THEN GOTO NEXT.SECTION
+            IF BUTTON = 'CLEARFILTERS' THEN
+            IF SECNO NE SECTIONNO THEN GOTO NEXT.SECTION
+            USERJOB<21,JJ> = ''; * CLEAR FILTERS FROM SECTION
+            END
+    *
+            DIV = DIVS<1,JJ>
+            PAGING = PAGINGNOS<1,JJ>
+            SCRIPT = SELSORTS<1,JJ>
+            COLS = COLSPEC<1,JJ>
+    *
+    * CALL A PROGRAM TO CREATE THE SECTION CONTENT INSTEAD OF CREATING A SCRIPT
+            PROGRAM.CALLED = FALSE
+            IF SCRIPT[1,1] = '@' THEN
+            PROGNAME = SCRIPT[2,999]
+            CALL @PROGNAME(JOBNO,RPT,COLS)
+            PROGRAM.CALLED = TRUE
+            END
+    *
+    * SUM THE COLUMN WIDTHS SO THE WIDTHS CAN BE PERCENTAGES
+            TOTAL.WIDTHS = 0
+            COLS.SVMC = DCOUNT(COLS,@SVM)
+            FOR KK = 1 TO COLS.SVMC
+            LINE = COLS<1,1,KK>
+            CONVERT '*' TO @AM IN LINE
+            WIDTH = LINE<3>
+            TOTAL.WIDTHS += WIDTH
+            NEXT KK
+    *
+    * SET UP THE HEADINGS AND ADD TO THE SCRIPT
+            HEADSPEC = ''
+            OUTPUT.LIST = ''
+            COLS.SVMC = DCOUNT(COLS,@SVM)
+            FOR KK = 1 TO COLS.SVMC
+            LINE = COLS<1,1,KK>
+            CONVERT '*' TO @AM IN LINE
+            DICTID = LINE<1>
+            COLHEAD = LINE<2>
+            WIDTH = LINE<3>
+            WIDTH.PERCENT = (WIDTH / TOTAL.WIDTHS) * 100; * CONVERT TO PERCENT
+            WIDTH = ICONV(WIDTH.PERCENT,'MR0')
+            JUST = LINE<4>
+            LINK = LINE<5>
+    *
+    * UPDATE THE COLUMN SORT, SORT SEQUENCE, OR FILTER
+    *   19 IS SORTASC OR SORTDESC IN THE COLUMN POSITION
+    *   20 IS THE SORT COLUMN SEQUENCE
+    *   21 IS THE FILTER STRING
+            IF SORTCOL AND SECNO = SECTIONNO AND COLNO = KK THEN
+                IF USERJOB<19,JJ,KK> = BUTTON THEN
+                USERJOB<19,JJ,KK> = ''
+                LOCATE(KK,USERJOB,20,JJ;UJK) THEN
+                    USERJOB = DELETE(USERJOB,20,JJ,UJK)
+                END
+                END ELSE
+                USERJOB<19,JJ,KK> = BUTTON
+                LOCATE(KK,USERJOB,20,JJ;UJK) THEN
+                    USERJOB = DELETE(USERJOB,20,JJ,UJK)
+                END
+                USERJOB<20,JJ,-1> = KK
+                END
+            END
+            SORTBY = USERJOB<19,JJ,KK>
+            IF BUTTON = 'FILTER' AND COLNO = KK THEN
+                USERJOB<21,JJ,KK> = FILTER
+            END
+            COLFILTER = USERJOB<21,JJ,KK>
+    *
+            ELEMENTS = ''
+            ELEMENTS<-1> = '"LABEL": "':COLHEAD:'"'
+            ELEMENTS<-1> = '"WIDTH": "':WIDTH:'"'
+            ELEMENTS<-1> = '"JUST": "':JUST:'"'
+            ELEMENTS<-1> = '"COLNO": "':KK:'"'
+            ELEMENTS<-1> = '"SORTBY": "':SORTBY:'"'
+            ELEMENTS<-1> = '"FILTER": "':COLFILTER:'"'
+    *
+            PARAM=FIELD(LINK,'(',2)
+            PARAM=FIELD(PARAM,')',1)
+            NUM.PARAM = DCOUNT(PARAM,' ')
+            IF NUM.PARAM < 1 THEN NUM.PARAM = 1
+    *
+            LINKTYPE = FIELD(LINK,'(',1)
+            BEGIN CASE
+                CASE LINKTYPE = 'MODULE';* MODULE({MODULEID})
+                MODDESC=OCONV(PARAM,'TMODULE;X;;1')
+                MODWIDTH=OCONV(PARAM,'TMODULE;X;;17')+60
+                MODHEIGHT=OCONV(PARAM,'TMODULE;X;;18')+90
+                ELEMENTS<-1> = '"LINK": "':LINKTYPE:'"'
+                ELEMENTS<-1> = '"MODULE": "':PARAM:'"'
+                ELEMENTS<-1> = '"MODULE_WIDTH": "':MODWIDTH:'"'
+                ELEMENTS<-1> = '"MODULE_HEIGHT": "':MODHEIGHT:'"'
+                CASE LINKTYPE = 'MODBUTTON'; * MODBUTTON({MODULEID};OPTIONAL-LABEL)
+                MODDESC = FIELD(PARAM,';',2)
+                PARAM = FIELD(PARAM,';',1)
+                IF MODDESC = '' THEN
+                    MODDESC=OCONV(PARAM,'TMODULE;X;;1')
+                END
+                MODWIDTH=OCONV(PARAM,'TMODULE;X;;17')+60
+                MODHEIGHT=OCONV(PARAM,'TMODULE;X;;18')+90
+                ELEMENTS<-1> = '"LINK": "':LINKTYPE:'"'
+                ELEMENTS<-1> = '"MODULE": "':PARAM:'"'
+                ELEMENTS<-1> = '"BUTTON_LABEL": "':MODDESC:'"'
+                ELEMENTS<-1> = '"MODULE_WIDTH": "':MODWIDTH:'"'
+                ELEMENTS<-1> = '"MODULE_HEIGHT": "':MODHEIGHT:'"'
+                CASE LINKTYPE = 'DOCLINK'
+                ELEMENTS<-1> = '"DOCLINK": "TRUE"'
+                CASE LINK NE ''
+                ELEMENTS<-1> = '"LINK": "':LINK:'"'
+            END CASE
+    *
+            CONVERT @AM TO ',' IN ELEMENTS
+            HEADSPEC<-1> = '{':ELEMENTS:'}'
+            IF PROGRAM.CALLED = FALSE THEN
+                OUTPUT.LIST<-1> = DICTID; * ADD TO EXECUTE COMMAND
+            END
+            NEXT KK
+    *
+            IF NOT(PROGRAM.CALLED) THEN
+    *
+    * ISOLATE THE SELECTS FROM SORTS
+            SORTCMD = ''; SELECTS = ''; SELECTS.DONE = 0
+            VERB.FILENAME = ''; SELCRIT.SORTBY = ''
+            SCRIPT.SVMC = DCOUNT(SCRIPT,@SVM)
+            FOR KK = 1 TO SCRIPT.SVMC
+                LINE = SCRIPT<1,1,KK>
+                IF LINE[1,5] = 'SORTT' OR LINE[1,5] = 'LISTT' OR SELECTS.DONE THEN
+                SORTCMD<-1> = LINE
+                SELECTS.DONE = 1
+    *
+    * PARSE SORT LINE FOR EXCEL AND RESORTS
+                IF LINE[1,5] = 'SORTT' OR LINE[1,5] = 'LISTT' THEN
+                    SORTLINE = LINE
+                    CONVERT ' ' TO @AM IN SORTLINE
+                    SORTLINE.AMC = DCOUNT(SORTLINE,@AM)
+                    FOR II = 1 TO SORTLINE.AMC
+                    WORD = SORTLINE<II>
+                    BEGIN CASE
+                        CASE WORD = 'SORTT' OR WORD = 'LISTT'
+                        VERB.FILENAME<-1> = WORD
+                        VERB.FILENAME<-1> = SORTLINE<II+1>
+                        II += 1
+                        CASE WORD = 'USING'
+                        VERB.FILENAME<-1> = WORD
+                        VERB.FILENAME<-1> = SORTLINE<II+1>
+                        II += 1
+                        CASE WORD[1,1] = "'"; VERB.FILENAME<-1> = WORD
+                        CASE 1
+                        SELCRIT.SORTBY<-1> = WORD
+                    END CASE
+                    NEXT II
+                END
+                END ELSE
+                SELECTS<-1> = LINE
+                END
+            NEXT KK
+    * UPDATE USERJOB WITH SELECTS, SORTS, AND OUTPUT LIST
+            UJSELECTS = SELECTS
+            CONVERT @AM TO @SVM IN UJSELECTS
+            USERJOB<15,JJ> = UJSELECTS
+    *
+            UJVERB.LIST = VERB.FILENAME
+            CONVERT @AM TO ' ' IN UJVERB.LIST
+            USERJOB<16,JJ> = UJVERB.LIST
+    *
+            UJSEL.LIST = SELCRIT.SORTBY
+            CONVERT @AM TO ' ' IN UJSEL.LIST
+            USERJOB<17,JJ> = UJSEL.LIST
+    *
+            UJOUTPUT.LIST = OUTPUT.LIST
+            CONVERT @AM TO @SVM IN UJOUTPUT.LIST
+            USERJOB<18,JJ> = UJOUTPUT.LIST
+    *
+            SORTCMD<-1> = OUTPUT.LIST
+            SORTCMD<-1> = 'ID-SUPP HDR-SUPP NI-SUPP'
+            CONVERT @AM TO ' ' IN SORTCMD
+    *
+    * PERFORM SELECTS
+            CMD = ''; SKIP.SORT = 0
+            SELECTS.AMC = DCOUNT(SELECTS,@AM)
+            FOR II = 1 TO SELECTS.AMC
+                LINE = SELECTS<II>
+                TAG = FIELD(LINE,' ',1)
+                TAG = FIELD(LINE,',',1)
+                BEGIN CASE
+                CASE LINE = ''
+                CASE LINE[1,3] = '%IF'
+                CASE TAG = 'P'
+                    CONVERT @AM TO ' ' IN CMD
+                    EXECUTE CMD CAPTURING RPT RETURNING ERRNO
+                    IF ERRNO = '401' THEN SKIP.SORT = 1; II = SELECTS.AMC; * DON'T CREATE OUTPUT
+                    CMD = ''
+                CASE 1
+                    CMD<-1> = LINE
+                END CASE
+            NEXT II
+    *
+    * EXECUTE SORT COMMAND
+            IF SKIP.SORT THEN
+                EXECUTE 'WHO'
+                RPT = ''
+            END ELSE
+    *
+    * IF SORT ACTION IS ACTIVE
+    * CHANGE SORT COMMAND TO SELECT COMMAND
+                IF USERJOB<20,JJ> NE '' THEN
+                SORTCMD = USERJOB<16,JJ>
+                SORTCMD = SWAP(SORTCMD,'LISTT','SELECT')
+                SORTCMD = SWAP(SORTCMD,'SORTT','SSELECT')
+                IF USERJOB<17,JJ> NE '' THEN
+                    SORTCMD<-1> = USERJOB<17,JJ>; * ADDITIONAL SEL-CRIT AND SORT
+                END
+                CONVERT @AM TO ' ' IN SORTCMD
+                CRT 'SORT CHANGED TO SELECT: ':SORTCMD
+                EXECUTE SORTCMD CAPTURING RPT RETURNING ERRNO
+    *
+    * BUILD RESORT COMMAND
+                SORTCMD = USERJOB<16,JJ>
+                SORTCOLS.SVMC = DCOUNT(USERJOB<20,JJ>,@SVM)
+                FOR KK = 1 TO SORTCOLS.SVMC
+                    SORTCOLNO = USERJOB<20,JJ,KK>
+                    COLVALUE = TRIM(USERJOB<18,JJ,SORTCOLNO>)
+                    SORTCODE = USERJOB<19,JJ,SORTCOLNO>
+                    IF INDEX(COLVALUE,' ',1) THEN
+                    DICTID = FIELD(COLVALUE,' ',2)
+                    END ELSE
+                    DICTID = COLVALUE
+                    END
+                    BEGIN CASE
+                    CASE SORTCODE = 'SORTASC'; SORTCMD<-1> = 'BY ':DICTID
+                    CASE SORTCODE = 'SORTDESC'; SORTCMD<-1> = 'BY-DSND ':DICTID
+                    END CASE
+                NEXT KK
+                IF USERJOB<17,JJ> NE '' THEN
+                    SORTCMD<-1> = USERJOB<17,JJ>
+                END
+                SORTCMD<-1> = USERJOB<18,JJ>
+                SORTCMD<-1> = 'ID-SUPP HDR-SUPP NI-SUPP'
+                CONVERT @AM TO ' ' IN SORTCMD
+                CONVERT @SVM TO ' ' IN SORTCMD
+                CRT 'RESORT CMD: ':SORTCMD
+                END
+                EXECUTE SORTCMD CAPTURING RPT RETURNING ERRNO
+            END
+            END
+    *
+    * BUILD JSON FROM OUTPUT
+            CONVERT @VM TO @SVM IN RPT
+            CONVERT CHAR(9) TO @VM IN RPT
+            CONVERT CHAR(13) TO @AM IN RPT
+            RPT = SWAP(RPT,'<BR>','_+')
+    *
+            HEADSPEC.AMC = DCOUNT(HEADSPEC,@AM); * NUMBER OF COLUMNS
+            ROWS = ''
+            RPT.AMC = DCOUNT(RPT,@AM)-1
+            FOR II = 1 TO RPT.AMC
+            ROW = TRIM(RPT<II>)
+            IF ROW NE '' THEN
+                VALUES = ''
+                FOR RJ = 1 TO HEADSPEC.AMC
+                VALUE = ROW<1,RJ>
+                VALUE = SWAP(VALUE,@SVM,'_+')
+                VALUES<-1> = '{"COLNO": "':RJ:'","VALUE": "':VALUE:'"}'
+                NEXT RJ
+                CONVERT @AM TO ',' IN VALUES
+                ROWS<-1> = '{"ROWID": "':II:'","VALUES": [':VALUES:']}'
+            END
+            NEXT II
+    *
+    * BUILD THE OUTPUT SECTION
+    *   IF SECTION HAS PAGING, CHECK FOR NAVIGATION ACTION
+            NUM.ROWS = DCOUNT(ROWS,@AM)
+            PAGES = ''
+            IF PAGING NE '' THEN
+            PAGES = NUM.ROWS / PAGING
+            IF INT(PAGES) NE PAGES THEN
+                PAGES = INT(PAGES) + 1
+            END
+    * CHANGE CURRENT PAGE
+            IF NAV THEN
+                BEGIN CASE
+                CASE BUTTON = 'CHGPG'
+                    IF NEWPAGENO >= 1 AND NEWPAGENO <= PAGES THEN
+                    PAGENO = INT(NEWPAGENO)
+                    END
+                CASE BUTTON = 'FIRSTPG'
+                    PAGENO = 1
+                CASE BUTTON = 'PREVPG'
+                    IF PAGENO NE 1 THEN PAGENO -= 1
+                CASE BUTTON = 'NEXTPG'
+                    IF PAGENO NE PAGES THEN PAGENO += 1
+                CASE BUTTON = 'LASTPG'
+                    PAGENO = PAGES
+                END CASE
+            END ELSE
+    * USE CURRENT PAGE OR SET TO 1
+                IF USERJOB<12,JJ> = '' THEN
+                PAGENO = 1
+                END ELSE
+                PAGENO = USERJOB<12,JJ>
+                END
+            END
+    *
+            BEGIN.ROWNO = PAGING * PAGENO - PAGING + 1
+            END.ROWNO = PAGING * PAGENO
+            OUTPUT = ''
+            FOR II = BEGIN.ROWNO TO END.ROWNO
+                IF ROWS<II> NE '' THEN OUTPUT<-1> = ROWS<II>
+            NEXT II
+            END ELSE
+            OUTPUT = ROWS
+            END
+            CONVERT @AM TO ',' IN HEADSPEC
+            CONVERT @AM TO ',' IN OUTPUT
+            CONVERT '*' TO @AM IN DIV
+            SECTION = '{"SECTIONID": "':SECNO:'"'
+            IF DIV<2> NE '' THEN SECTION<-1> = '"HEADING": "':DIV<2>:'"'
+            IF DIV<3> NE '' THEN SECTION<-1> = '"ANCHOR": "':DIV<3>:'"'
+            IF DIV<4> NE '' THEN SECTION<-1> = '"EXCEL": "TRUE"'
+            IF DIV<5> NE '' THEN SECTION<-1> = '"SORTABLE": "TRUE"'
+            IF DIV<6> NE '' THEN SECTION<-1> = '"FILTERS": "TRUE"'
+            IF PAGING NE '' THEN SECTION<-1> = '"PAGING": "':PAGING:'"'
+            IF PAGING NE '' THEN SECTION<-1> = '"PAGENO": "':PAGENO:'"'
+            IF PAGING NE '' THEN SECTION<-1> = '"PAGES": "':PAGES:'"'
+            SECTION<-1> = '"COLHEADS": [':HEADSPEC:']'
+            SECTION<-1> = '"OUTPUT": [':OUTPUT:']}'
+            CONVERT @AM TO ',' IN SECTION
+    *
+            SECTIONS<-1> = SECTION
+            USERJOB<12,JJ> = PAGENO
+            USERJOB<13,JJ> = PAGES
+            USERJOB<14,JJ> = PAGING
+    NEXT.SECTION:
+        NEXT JJ
+    * UPDATE USERJOB
+        WRITE USERJOB ON USERJOBSF,JOBNO
+    *
+        CONVERT @AM TO ',' IN SECTIONS
+        SECTIONS = '"SECTIONS": [':SECTIONS:']'
+        JSON = '{':TITLE.CONTROLS:',':SECTIONS:'}'
+        CALL WEB.SEND(JSON)
+        STOP
+    
+    **************************************************************************
+    ERRMSG: ; * ERROR MESSAGE
+    **************************************************************************
+        JSON = '{"SUCCESS": "FALSE","ERRMSG": "':ERRMSG:'"}'
+        CALL WEB.SEND(JSON)
+        STOP
+    *
+    *-------------------------------------------------------------------------
+    * PROCESS PROC INPUTS
+    *-------------------------------------------------------------------------
+    SUBSTITUTIONS:
+        PL=''
+        INQ.VMC = DCOUNT(INQ,@VM)
+        FOR J = 1 TO INQ.VMC
+            LINE = INQ<1,J>
+            LINE.SVMC = DCOUNT(INQ,@SVM)
+            FOR K = 1 TO LINE.SVMC
+            ULINE=INQ<1,J,K>
+            IF ULINE[1,1]='*' THEN GOTO NEXTLINE
+            BEGIN CASE
+                CASE ULINE[1,2]='%$'
+                ATTRNO=FIELD(ULINE[3,99],' ',1)
+                VALUE=FIELD(ULINE,' ',2)
+                IF NUM(ATTRNO) THEN
+                    IF ATTRNO>0 AND ATTRNO<100 THEN A<1,ATTRNO>=VALUE
+                END
+                ULINE=''
+                CASE FIELD(ULINE,' ',1)='%A'
+                FOR ZZ=1 TO DCOUNT(A,@VM)
+                    CAPT<-1>='A(':ZZ:')="':A<1,ZZ>:'"'
+                NEXT ZZ
+                ULINE=''
+                CASE FIELD(ULINE,' ',1)='%IF'
+                CASE ULINE[1,1]='%'
+                PROGNAME=ULINE[2,99]
+                CALL @PROGNAME(A)
+                ULINE=''
+            END CASE
+            LOOP POS=INDEX(ULINE,'\',1) WHILE POS DO
+                BEG=ULINE[1,POS-1]
+                PRE=FIELD(BEG,' ',DCOUNT(BEG,' '))
+                BEG=BEG[1,COL1()]
+                AVAL=FIELD(ULINE[POS+1,99],' ',1)
+                CODE=OCONV(AVAL,'MCN')
+                IF CODE='' THEN
+                CODE=AVAL[1,1]
+                END
+                AFTER=ULINE[POS+LEN(CODE)+1,99]
+                SUF=FIELD(AFTER,' ',1)
+                AFTER=AFTER[COL2(),99]
+                VALUE=''
+                BEGIN CASE
+                CASE NUM(CODE)
+                    IF A<1,CODE>='' THEN
+                    IF PRE='' THEN
+                        VALUE=''
+                    END ELSE
+                        VALUE=PRE:SUF
+                    END
+                    END ELSE
+                    FOR JJ=1 TO 999 UNTIL A<1,CODE,JJ>=''
+                        IF PRE='' AND A<1,CODE,JJ+1>='' THEN
+                        VALUE=VALUE:A<1,CODE,JJ>
+                        END ELSE
+                        VALUE=VALUE:PRE:A<1,CODE,JJ>:SUF
+                        END
+                    NEXT JJ
+                    END
+                CASE CODE='G'
+                    FOR JJ=1 TO 999 UNTIL PROC<4,JJ>=''
+                    VALUE=VALUE:PROC<4,JJ>:' '
+                    NEXT JJ
+                CASE CODE='U'; VALUE=PRE:USERID:SUF
+                CASE CODE='P'; VALUE=PRE:SYSTEM(22):SUF; *--- PIB#
+                CASE CODE='J'; VALUE=PRE:JOBNO:SUF; *[8]
+                CASE CODE='C'; VALUE=PRE:OCONV(USERID,'TUSER;X;;35'):SUF; * USER CURRENT CUST#
+                CASE CODE='T'; VALUE=PRE:OCONV(USERID,'TUSER;X;;15'):SUF; * USER TYPE
+                CASE CODE='B'; VALUE=PRE:OCONV(USERID,'TUSER;X;;38'):SUF; * USER BRANCH
+                CASE CODE='D'; VALUE=PRE:OCONV(USERID,'TUSER;X;;39'):SUF; * USER DIVISION
+                CASE CODE='A'; VALUE=PRE:OCONV('ACCOUNT','TTABLE;X;;1'):SUF; * ACCOUNT NAME
+                CASE CODE='Q'
+                    OPEN 'QCUSER' TO QCUSERF THEN
+                    READ QCUSER FROM QCUSERF,USERID THEN
+                        QCUSER.VMC = DCOUNT(QCUSER<1>,@VM)
+                        FOR KK = 1 TO QCUSER.VMC
+                        VALUE := PRE:QCUSER<1,KK>:SUF
+                        NEXT KK
+                    END
+                    END
+                    IF VALUE = '' THEN VALUE = PRE:SUF
+                END CASE
+                ULINE=BEG:VALUE:AFTER
+            REPEAT
+    *-------------------------------------------------------------------------
+    * IF STATEMENTS
+    *-------------------------------------------------------------------------
+    EVALUATE:
+            BEGIN CASE
+                CASE TRIM(ULINE[1,4]) = 'IF "'
+                EVALLINE = ULINE
+                CONVERT '"' TO @AM IN EVALLINE
+                VALUE1 = '"':EVALLINE<2>:'"'
+                OPERATOR = TRIM(EVALLINE<3>)
+                VALUE2 = '"':EVALLINE<4>:'"'
+                ULINE = TRIM(OCONV(ULINE,'G4"999'))
+                IF VALUE2='NULL' THEN VALUE2=''
+                IF DEBUG.ON THEN
+                    CRT 'EVAL:   ':EVALLINE
+                    CRT 'VALUE1: ':VALUE1
+                    CRT 'OPER:   ':OPERATOR
+                    CRT 'VALUE2: ':VALUE2
+                    CRT 'ULINE:  ':ULINE
+                END
+                BEGIN CASE
+                    CASE OPERATOR='='
+                    IF VALUE1 # VALUE2 THEN ULINE=''
+                    CASE OPERATOR='#'
+                    IF VALUE1 = VALUE2 THEN ULINE=''
+                END CASE
+                IF DEBUG.ON THEN CRT 'POST EVAL ':ULINE; INPUT TRASH
+                GOTO EVALUATE
+                CASE TRIM(ULINE[1,3]) = 'IF'
+                VALUE1=FIELD(ULINE,' ',2)
+                OPERATOR=FIELD(ULINE,' ',3)
+                VALUE2=FIELD(ULINE,' ',4)
+                ULINE=ULINE[COL2()+1,9999]
+                IF VALUE2='NULL' THEN VALUE2=''
+                BEGIN CASE
+                    CASE OPERATOR='='
+                    IF VALUE1 # VALUE2 THEN ULINE=''
+                    CASE OPERATOR='#'
+                    IF VALUE1 = VALUE2 THEN ULINE=''
+                END CASE
+                GOTO EVALUATE
+            END CASE
+    *
+            IF TRIM(ULINE) NE '' THEN
+                PL<1,J,K>=ULINE
+            END
+    *
+    NEXTLINE:
+            NEXT K
+        NEXT J
+    *
+        INQ=PL
+        RETURN
