@@ -84,7 +84,7 @@ var ExampleHighlightRules = function() {
             },
             {
                 token: "comment",
-                regex: "; \\*.*"
+                regex: ";[ \t]+\\*.*"
             },
             {
                 token: "comment",
@@ -92,7 +92,7 @@ var ExampleHighlightRules = function() {
             },
             {
                 token: "comment",
-                regex: "\\*.*"
+                regex: "    \\*.*"
             },
             {
                 token: "string",
