@@ -35,7 +35,7 @@ var ExampleHighlightRules = function() {
         "and|cat|div|divd|divs|eq|equ|eqs|ge|ges|gt|le|les|lt|match|matchfield|ne|negs|nes|or|smul"
     );
     var keyword_control = (
-        "begin case|begin work|break|commit work|continue|debug|end|end case|case|exit|for|go|gosub|goto|group|if|ifr|ifs|inputtrap off|inputtrap|loop|next|repeat|return|rollback work|sleep|stop|then|to|wake"
+        "begin case|begin work|begin|break|commit work|continue|debug|end|end case|case|exit|for|go|gosub|goto|group|if|ifr|ifs|inputtrap off|inputtrap|loop|next|repeat|return|rollback work|sleep|stop|then|to|wake"
     );
     var support_function = (
         "abort|aux|casing|cats|changetimestamp|clear|cleardata|clearfile|clearinput|clearselect|compare|convert|crt|data|del|delete|echo|equate|error|find|findstr|flush|footing|format|formlist|function|get|getx|getusergroup|heading|headinge|headingn|hush|in|input|inputclear|inputctrl|inputerr|inputnull|inputparity|ins|key|keyin|let|locate|mat|matbuild|matparse|null|out|page|precision|print on|printchar|printer|print|procread|procwrite|prompt|remove|replace|rewind|root|rqm|send|sendx|spoolq|ta|tcl|tclread"
@@ -92,7 +92,7 @@ var ExampleHighlightRules = function() {
             },
             {
                 token: "comment",
-                regex: "    \\*.*"
+                regex: "^\\*.*"
             },
             {
                 token: "string",
@@ -144,6 +144,7 @@ editor.session.setMode("ace/mode/pick");
 editor.setTheme("ace/theme/xcode");
 // var langTools = ace.require("ace/ext/language_tools");
 editor.setOptions({
+    tabSize: 2,
     enableBasicAutocompletion: true,
     enableLiveAutocompletion: true
 });
